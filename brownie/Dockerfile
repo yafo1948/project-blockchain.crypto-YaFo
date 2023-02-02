@@ -15,6 +15,9 @@ RUN pip install --upgrade pip cython && pip install --upgrade cytoolz eth-browni
 USER 1000:1000
 WORKDIR /workspace
 
+COPY brownie-config.yaml /home/brownie
+
+
 RUN . /home/brownie/.profile && brownie init && echo "pragma solidity ^0.8.0; contract Lorem {}" >> contracts/lorem.sol && brownie compile
 
 ENTRYPOINT ["bash", "-l", "-c"]
