@@ -8,7 +8,7 @@ import "../interfaces/IMultisigToken.sol";
 /**
  * @dev An implementation of the ERC20 standard for a "Reichman University" Token.
  */
-contract RUToken is IERC20, IERC20Metadata {
+contract RUToken is IERC20, IERC20Metadata, IMultisigToken {
     /**
      * Maximum number of mintable tokens.
      */
@@ -19,10 +19,26 @@ contract RUToken is IERC20, IERC20Metadata {
      */
     uint public tokenPrice;
 
+    /**
+     * Total amount of existing tokens.
+     */
+    uint256 public totalAmount;
+
+
+    mapping(address => uint) public balances;
+    mapping(address => mapping(address => uint256)) public allowances;
+
+    struct multisig_addresses {
+        uint nonce;
+        address [] pks_list;
+    }
+    mapping(address => multisig_addresses) multiAdd;
+
 
     constructor(uint _tokenPrice, uint _maxTokens) {
         tokenPrice = _tokenPrice;
         maxTokens = _maxTokens;
+        totalAmount = 0;
     }
 
     /**
@@ -40,12 +56,20 @@ contract RUToken is IERC20, IERC20Metadata {
         return "RUX";
     }
 
+    /**
+     *returns nonce associate with multisig_address parameter.
+     */
+    function nonce(address multisig_address) external view returns (uint256) {
+        return multiAdd[multisig_address].nonce;
+    }
+
 
     /**
      * @dev Returns the amount of tokens in existence.
      */
     function totalSupply() external view returns (uint256) {
         // TODO: Implement
+        return totalAmount;
     }
 
     /**
@@ -53,6 +77,8 @@ contract RUToken is IERC20, IERC20Metadata {
      */
     function balanceOf(address account) public view override returns (uint256) {
         // TODO: Implement
+        require(account != address(0), "check that account isn't the zero address");
+        return balances[account];
     }
 
 
@@ -65,6 +91,13 @@ contract RUToken is IERC20, IERC20Metadata {
      */
     function transfer(address recipient, uint256 amount) external override returns (bool) {
         // TODO: Implement
+        require(balances[msg.sender] >= amount);
+        require(recipient != address(0), "recipient can't be the zero address");
+        balances[msg.sender] -= amount;
+        balances[recipient] += amount;
+        emit Transfer(msg.sender, recipient, amount);
+        return true;
+
     }
 
     /**
@@ -76,6 +109,7 @@ contract RUToken is IERC20, IERC20Metadata {
      */
     function allowance(address owner, address spender) external view override returns (uint256) {
         // TODO: Implement
+        return allowances[owner][spender];
     }
 
     /**
@@ -94,6 +128,12 @@ contract RUToken is IERC20, IERC20Metadata {
      */
     function approve(address spender, uint256 amount) external override returns (bool) {
         // TODO: Implement
+        address owner = msg.sender;
+        allowances[owner][spender] = 0;
+        require(allowances[owner][spender] == 0);
+        allowances[owner][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
+        return true;
     }
 
     /**
@@ -107,6 +147,15 @@ contract RUToken is IERC20, IERC20Metadata {
      */
     function transferFrom(address sender, address recipient, uint256 amount) external override returns (bool) {
         // TODO: Implement
+        address owner = sender;
+        require(balances[sender] >= amount, "check sender has enough to send amount");
+        require(allowances[sender][msg.sender] >= amount);
+        require(recipient != address(0), "check not sending to zero address");
+        balances[sender] -= amount;
+        balances[recipient] += amount;
+        allowances[sender][msg.sender] -= amount;
+        emit Transfer(sender, recipient, amount);
+        return true;
     }
 
     /**
@@ -115,6 +164,13 @@ contract RUToken is IERC20, IERC20Metadata {
      */
     function mint() public payable returns (uint) {
         // TODO: Implement
+        require(tokenPrice > 0);
+        require(msg.sender != address(0), "prevent minting from zero address");
+        uint amount = (msg.value)/(tokenPrice);
+        require((totalAmount + amount) <= maxTokens, "prevent minting more than maxTokens");
+        balances[msg.sender] += amount;
+        totalAmount += amount;
+        return amount;
     }
 
     /**
@@ -122,6 +178,88 @@ contract RUToken is IERC20, IERC20Metadata {
      */
     function burn(uint amount) public {
         // TODO: Implement
+        require((balances[msg.sender] - amount) >= 0);
+        require(msg.sender != address(0));
+        require(amount <= totalAmount, "burn amount must be less than total supply");
+        balances[msg.sender] -= amount;
+        uint amountEthTransfer = 0;
+        if (amount > 0) {
+            amountEthTransfer = (amount)*(tokenPrice);
+            require(amountEthTransfer / amount == tokenPrice);
+        } else {
+            amountEthTransfer = 0;
+        }
+        balances[address(0)] += amount;
+        payable(msg.sender).transfer(amountEthTransfer);
+        totalAmount -= amount;
     }
+
+    /**
+     * @dev registers a multisig address controlled by the public keys `pk1`, `pk2` and `pk3`.
+     * The returned address should always match
+     */
+    function registerMultisigAddress(address pk1, address pk2, address pk3) external returns (address){
+        bytes32 new_address = keccak256(abi.encodePacked(pk1, pk2, pk3));
+        address multisig_address = address(uint160(uint256(new_address)));
+        require(multiAdd[multisig_address].nonce == 0);
+        multiAdd[multisig_address].nonce = 1;
+        multiAdd[multisig_address].pks_list = [pk1,pk2,pk3];
+        return multisig_address;
+
+    }
+
+    /**
+     * @dev returns the address controlled by the public keys `pk1`, `pk2` and `pk3`.
+     */
+    function getMultisigAddress(address pk1, address pk2, address pk3) external pure returns (address){
+        bytes32 new_address = keccak256(abi.encodePacked(pk1, pk2, pk3));
+        address multisig_address = address(uint160(uint256(new_address)));
+        return multisig_address;
+
+    }
+
+    function transferFrom_multisig(address sender, address recipient, uint256 amount) private returns (bool) {
+        address owner = sender;
+        require(recipient != address(0));
+        require(sender != address(0));
+        require(balances[sender] >= amount);
+        balances[sender] -= amount;
+        balances[recipient] += amount;
+        emit Transfer(sender, recipient, amount);
+        return true;
+    }
+
+    /**
+     * @dev Moves `amount` tokens from the multisig address `multisigOwner` to `recipient`.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     * `multisigOwner` must have been previously registered using `registerMultisigAddress`.
+     * `msg.sender` must be one of the public keys controlling `multisigOwner`, and `secondSig` must be a valid signature proving that
+     * a second controlling public key approved the transaction as well.
+     *
+     * `nonce` is used to prevent replay attacks (note that EVM does not allow a contract to access the actual transaction nonce).
+     *
+     * Emits a {Transfer} event.
+     */
+    function transfer2of3(address multisigOwner, address recipient, uint256 amount, uint nonce, Signature calldata secondSig) external returns (bool){
+        require(multisigOwner != address(0));
+        require(nonce == multiAdd[multisigOwner].nonce + 1);
+        require(recipient != address(0));
+        require(amount > 0);
+        address secondSig_address = ecrecover(keccak256(abi.encodePacked(address(this), recipient, multisigOwner, amount, nonce)), secondSig.v, secondSig.r, secondSig.s);
+        require(msg.sender != secondSig_address);
+        require(secondSig_address != address(0));
+        address multisig_address_pk1 = multiAdd[multisigOwner].pks_list[0];
+        address multisig_address_pk2 = multiAdd[multisigOwner].pks_list[1];
+        address multisig_address_pk3 = multiAdd[multisigOwner].pks_list[2];
+        require(multisig_address_pk1 == msg.sender || multisig_address_pk2 == msg.sender || multisig_address_pk3 == msg.sender);
+        require(multisig_address_pk1 == secondSig_address || multisig_address_pk2 == secondSig_address || multisig_address_pk3 == secondSig_address);
+        multiAdd[multisigOwner].nonce += 1;
+        require(transferFrom_multisig(multisigOwner, recipient, amount));
+
+        return true;
+
+    }
+
 
 }
