@@ -1,3 +1,6 @@
+## NOTE re REPO: After tons of time spent trying to navigate the "Course VCS server" on Gitea and attempting to create a repo there with Reichman credentials, the limited and restricted functionality ultimately was not workable, and we wanted to have something to submit that can be accessed and tested, so created a repo in existing "normal" git account, while keeping the name of the file in the format requested in the project readme - and notably the user1-user2 values are the usernames that were appicable in the Gitea course VCS and correspond to our Reichman usernames/emails. The usernames in our main standard github accounts are yafo1948 and YamDaniel, respectively, for reference and clarification. Please let us know if any of this creates workflow and testing issues, and we'll be glad to accomodate and be responsive to whatever can solve and address any such issues that arise. Thanks in advance for understanding! 
+
+
 # Final project for Blockchains and Cryptocurrencies Course
 
 ## Overview
